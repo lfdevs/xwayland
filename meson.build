@@ -3,16 +3,18 @@ project('xwayland', 'c',
             'buildtype=debugoptimized',
             'c_std=gnu99',
         ],
-        version: '21.1.4',
-        meson_version: '>= 0.46.0',
+        version: '22.0.99.902',
+        meson_version: '>= 0.47.0',
 )
+release_date = '2021-07-05'
+
 add_project_arguments('-DHAVE_DIX_CONFIG_H', language: ['c', 'objc'])
 cc = meson.get_compiler('c')
 
-add_global_arguments('-fno-strict-aliasing', language : 'c')
-add_global_arguments('-fvisibility=hidden', language : 'c')
+add_project_arguments('-fno-strict-aliasing', language : 'c')
+add_project_arguments('-fvisibility=hidden', language : 'c')
 
-add_global_link_arguments('-fvisibility=hidden', language : 'c')
+add_project_link_arguments('-fvisibility=hidden', language : 'c')
 
 if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
     test_wflags = [
@@ -56,37 +58,37 @@ foreach wflag: test_wflags
     endif
 endforeach
 
-add_global_arguments(common_wflags, language : ['c', 'objc'])
+add_project_arguments(common_wflags, language : ['c', 'objc'])
 
 libdrm_req = '>= 2.4.89'
 libselinux_req = '>= 2.0.86'
 xext_req = '>= 1.0.99.4'
-wayland_req = '>= 1.3.0'
-wayland_protocols_req = '>= 1.18'
+wayland_req = '>= 1.5.0'
+wayland_protocols_req = '>= 1.22'
 gbm_req = '>= 10.2'
 
-xproto_dep = dependency('xproto', version: '>= 7.0.31')
-randrproto_dep = dependency('randrproto', version: '>= 1.6.0')
-renderproto_dep = dependency('renderproto', version: '>= 0.11')
-xextproto_dep = dependency('xextproto', version: '>= 7.2.99.901')
-inputproto_dep = dependency('inputproto', version: '>= 2.3')
-kbproto_dep = dependency('kbproto', version: '>= 1.0.3')
-fontsproto_dep = dependency('fontsproto', version: '>= 2.1.3')
-fixesproto_dep = dependency('fixesproto', version: '>= 5.0')
-damageproto_dep = dependency('damageproto', version: '>= 1.1')
-xcmiscproto_dep = dependency('xcmiscproto', version: '>= 1.2.0')
-bigreqsproto_dep = dependency('bigreqsproto', version: '>= 1.1.0')
+xproto_dep = dependency('xproto', version: '>= 7.0.31', fallback: ['xorgproto', 'ext_xorgproto'])
+randrproto_dep = dependency('randrproto', version: '>= 1.6.0', fallback: ['xorgproto', 'ext_xorgproto'])
+renderproto_dep = dependency('renderproto', version: '>= 0.11', fallback: ['xorgproto', 'ext_xorgproto'])
+xextproto_dep = dependency('xextproto', version: '>= 7.2.99.901', fallback: ['xorgproto', 'ext_xorgproto'])
+inputproto_dep = dependency('inputproto', version: '>= 2.3.99.1', fallback: ['xorgproto', 'ext_xorgproto'])
+kbproto_dep = dependency('kbproto', version: '>= 1.0.3', fallback: ['xorgproto', 'ext_xorgproto'])
+fontsproto_dep = dependency('fontsproto', version: '>= 2.1.3', fallback: ['xorgproto', 'ext_xorgproto'])
+fixesproto_dep = dependency('fixesproto', version: '>= 6.0', fallback: ['xorgproto', 'ext_xorgproto'])
+damageproto_dep = dependency('damageproto', version: '>= 1.1', fallback: ['xorgproto', 'ext_xorgproto'])
+xcmiscproto_dep = dependency('xcmiscproto', version: '>= 1.2.0', fallback: ['xorgproto', 'ext_xorgproto'])
+bigreqsproto_dep = dependency('bigreqsproto', version: '>= 1.1.0', fallback: ['xorgproto', 'ext_xorgproto'])
 xtrans_dep = dependency('xtrans', version: '>= 1.3.5')
 
-videoproto_dep = dependency('videoproto')
-compositeproto_dep = dependency('compositeproto', version: '>= 0.4')
-recordproto_dep = dependency('recordproto', version: '>= 1.13.99.1')
-scrnsaverproto_dep = dependency('scrnsaverproto', version: '>= 1.1')
-resourceproto_dep = dependency('resourceproto', version: '>= 1.2.0')
-dri3proto_dep = dependency('dri3proto', version: '>= 1.2', required: get_option('dri3') == 'true')
-xineramaproto_dep = dependency('xineramaproto')
-xf86bigfontproto_dep = dependency('xf86bigfontproto', version: '>= 1.2.0', required: get_option('xf86bigfont'))
-xf86vidmodeproto_dep = dependency('xf86vidmodeproto', version: '>= 2.2.99.1')
+videoproto_dep = dependency('videoproto', fallback: ['xorgproto', 'ext_xorgproto'])
+compositeproto_dep = dependency('compositeproto', version: '>= 0.4', fallback: ['xorgproto', 'ext_xorgproto'])
+recordproto_dep = dependency('recordproto', version: '>= 1.13.99.1', fallback: ['xorgproto', 'ext_xorgproto'])
+scrnsaverproto_dep = dependency('scrnsaverproto', version: '>= 1.1', fallback: ['xorgproto', 'ext_xorgproto'])
+resourceproto_dep = dependency('resourceproto', version: '>= 1.2.0', fallback: ['xorgproto', 'ext_xorgproto'])
+dri3proto_dep = dependency('dri3proto', version: '>= 1.2', fallback: ['xorgproto', 'ext_xorgproto'], required: get_option('dri3') == 'true')
+xineramaproto_dep = dependency('xineramaproto', fallback: ['xorgproto', 'ext_xorgproto'])
+xf86bigfontproto_dep = dependency('xf86bigfontproto', version: '>= 1.2.0', fallback: ['xorgproto', 'ext_xorgproto'], required: get_option('xf86bigfont'))
+xf86vidmodeproto_dep = dependency('xf86vidmodeproto', version: '>= 2.2.99.1', fallback: ['xorgproto', 'ext_xorgproto'])
 xshmfence_dep = dependency('xshmfence', version: '>= 1.1', required: false)
 
 pixman_dep = dependency('pixman-1')
@@ -163,6 +165,7 @@ endif
 xwayland_dep = [
     dependency('wayland-client', version: wayland_req, required: true),
     dependency('wayland-protocols', version: wayland_protocols_req, required: true),
+    dependency('libxcvt', fallback: ['libxcvt', 'libxcvt_dep'], required: true),
 ]
 
 if build_glamor
@@ -462,6 +465,50 @@ manpage_config.set('XKB_DFLT_OPTIONS', get_option('xkb_default_options'))
 manpage_config.set('bundle_id_prefix', '...')
 manpage_config.set('default_font_path', default_font_path)
 
+require_docs = get_option('docs') == 'true'
+require_devel_docs = get_option('devel-docs') == 'true'
+require_docs_pdf = (require_docs or require_devel_docs) and get_option('docs-pdf') == 'true'
+
+sgml_doctools_dep = dependency('xorg-sgml-doctools',
+                               required: require_docs or require_devel_docs)
+xmlto = find_program('xmlto', required: require_docs or require_devel_docs)
+xsltproc = find_program('xsltproc', required: require_docs or require_devel_docs)
+fop = find_program('fop', required: require_docs_pdf)
+
+build_docs = (get_option('docs') != 'false' and
+    sgml_doctools_dep.found() and
+    xmlto.found())
+
+build_docs_devel = (get_option('devel-docs') != 'false' and
+    sgml_doctools_dep.found() and
+    xmlto.found())
+
+build_docs_pdf = (get_option('docs-pdf') != 'false' and
+    (build_docs or build_docs_devel) and
+    fop.found())
+
+if build_docs or build_docs_devel
+    doc_sgml_path = sgml_doctools_dep.get_pkgconfig_variable('sgmlrootdir')
+    doc_stylesheet_srcdir = join_paths(doc_sgml_path, 'X11')
+
+    # once we bump meson dependency to 0.56.0 we can use
+    # meson.project_build_root() instead of meson.build_root()
+
+    # Meson does not and will not support functions so we are copy-pasting
+    # documentation build code around which is unfortunate
+    # See https://mesonbuild.com/FAQ.html#why-doesnt-meson-have-user-defined-functionsmacros
+
+    docs_xmlto_search_flags = [
+        '--searchpath', doc_stylesheet_srcdir,
+        '--searchpath', meson.build_root(),
+    ]
+
+    docs_xslt_search_flags = [
+        '--path', doc_stylesheet_srcdir,
+        '--path', meson.build_root(),
+    ]
+endif
+
 # Include must come first, as it sets up dix-config.h
 subdir('include')
 
@@ -490,6 +537,7 @@ subdir('Xi')
 if build_glamor
     subdir('glamor')
 endif
+subdir('doc')
 
 # Common static libraries of all X servers
 libxserver = [

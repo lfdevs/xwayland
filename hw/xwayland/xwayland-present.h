@@ -29,37 +29,34 @@
 #include <xwayland-config.h>
 
 #include <dix.h>
+#include <present_priv.h>
 
 #include "xwayland-types.h"
 
 #ifdef GLAMOR_HAS_GBM
 struct xwl_present_window {
-    struct xwl_present_event *sync_flip;
-    WindowPtr window;
     struct xorg_list frame_callback_list;
 
     uint64_t msc;
     uint64_t ust;
 
     OsTimerPtr frame_timer;
+    /* Timestamp when the current timer was first armed */
+    CARD32 timer_armed;
 
     struct wl_callback *sync_callback;
 
     struct xorg_list wait_list;
-    struct xorg_list release_list;
+    struct xorg_list flip_queue;
+    struct xorg_list idle_queue;
+
+    present_vblank_ptr flip_active;
 };
 
 struct xwl_present_event {
-    uint64_t event_id;
-    uint64_t target_msc;
+    present_vblank_rec vblank;
 
-    Bool abort;
-    Bool pending;
-
-    struct xwl_present_window *xwl_present_window;
     PixmapPtr pixmap;
-
-    struct xorg_list list;
 };
 
 void xwl_present_frame_callback(struct xwl_present_window *xwl_present_window);

@@ -2405,21 +2405,19 @@ _XkbSetMapCheckLength(xkbSetMapReq *req)
         keytype = (xkbKeyTypeWireDesc *)(req + 1);
         for (i = 0; i < req->nTypes; i++) {
             _add_check_len(XkbPaddedSize(sz_xkbKeyTypeWireDesc));
-            if (req->flags & XkbSetMapResizeTypes) {
-                _add_check_len(keytype->nMapEntries
-                               * sz_xkbKTSetMapEntryWireDesc);
-                preserve = keytype->preserve;
-                map_count = keytype->nMapEntries;
-                if (preserve) {
-                    _add_check_len(map_count * sz_xkbModsWireDesc);
-                }
-                keytype += 1;
-                keytype = (xkbKeyTypeWireDesc *)
-                          ((xkbKTSetMapEntryWireDesc *)keytype + map_count);
-                if (preserve)
-                    keytype = (xkbKeyTypeWireDesc *)
-                              ((xkbModsWireDesc *)keytype + map_count);
+            _add_check_len(keytype->nMapEntries
+                           * sz_xkbKTSetMapEntryWireDesc);
+            preserve = keytype->preserve;
+            map_count = keytype->nMapEntries;
+            if (preserve) {
+                _add_check_len(map_count * sz_xkbModsWireDesc);
             }
+            keytype += 1;
+            keytype = (xkbKeyTypeWireDesc *)
+                      ((xkbKTSetMapEntryWireDesc *)keytype + map_count);
+            if (preserve)
+                keytype = (xkbKeyTypeWireDesc *)
+                          ((xkbModsWireDesc *)keytype + map_count);
         }
     }
     /* syms */
@@ -2513,14 +2511,13 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
         }
     }
 
-    if ((req->present & XkbKeyTypesMask) &&
-        (!CheckKeyTypes(client, xkb, req, (xkbKeyTypeWireDesc **) &values,
-                        &nTypes, mapWidths, doswap))) {
-        client->errorValue = nTypes;
-        return BadValue;
-    }
-    else {
+    if (!(req->present & XkbKeyTypesMask)) {
         nTypes = xkb->map->num_types;
+    }
+    else if (!CheckKeyTypes(client, xkb, req, (xkbKeyTypeWireDesc **) &values,
+			       &nTypes, mapWidths, doswap)) {
+	    client->errorValue = nTypes;
+	    return BadValue;
     }
 
     /* symsPerKey/mapWidths must be filled regardless of client-side flags */
@@ -2716,7 +2713,7 @@ _XkbSetMap(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req, char *values)
 int
 ProcXkbSetMap(ClientPtr client)
 {
-    DeviceIntPtr dev;
+    DeviceIntPtr dev, master;
     char *tmp;
     int rc;
 
@@ -2744,7 +2741,7 @@ ProcXkbSetMap(ClientPtr client)
     if (rc != Success)
         return rc;
 
-    DeviceIntPtr master = GetMaster(dev, MASTER_KEYBOARD);
+    master = GetMaster(dev, MASTER_KEYBOARD);
 
     if (stuff->deviceSpec == XkbUseCoreKbd) {
         DeviceIntPtr other;

@@ -618,10 +618,7 @@ glamor_init(ScreenPtr screen, unsigned int flags)
 {
     glamor_screen_private *glamor_priv;
     int gl_version;
-    int glsl_major, glsl_minor;
     int max_viewport_size[2];
-    const char *shading_version_string;
-    int shading_version_offset;
 
     PictureScreenPtr ps = GetPictureScreenIfSet(screen);
 
@@ -670,9 +667,6 @@ glamor_init(ScreenPtr screen, unsigned int flags)
      * register correct close screen function. */
     if (flags & GLAMOR_USE_EGL_SCREEN) {
         glamor_egl_screen_init(screen, &glamor_priv->ctx);
-    } else {
-        if (!glamor_glx_screen_init(&glamor_priv->ctx))
-            goto fail;
     }
 
     glamor_make_current(glamor_priv);
@@ -686,29 +680,7 @@ glamor_init(ScreenPtr screen, unsigned int flags)
     glamor_priv->is_core_profile =
         gl_version >= 31 && !epoxy_has_gl_extension("GL_ARB_compatibility");
 
-    shading_version_string = (char *) glGetString(GL_SHADING_LANGUAGE_VERSION);
-
-    if (!shading_version_string) {
-        LogMessage(X_WARNING,
-                   "glamor%d: Failed to get GLSL version\n",
-                   screen->myNum);
-        goto fail;
-    }
-
-    shading_version_offset = 0;
-    if (strncmp("OpenGL ES GLSL ES ", shading_version_string, 18) == 0)
-        shading_version_offset = 18;
-
-    if (sscanf(shading_version_string + shading_version_offset,
-               "%i.%i",
-               &glsl_major,
-               &glsl_minor) != 2) {
-        LogMessage(X_WARNING,
-                   "glamor%d: Failed to parse GLSL version string %s\n",
-                   screen->myNum, shading_version_string);
-        goto fail;
-    }
-    glamor_priv->glsl_version = glsl_major * 100 + glsl_minor;
+    glamor_priv->glsl_version = epoxy_glsl_version();
 
     if (glamor_priv->is_gles) {
         /* Force us back to the base version of our programs on an ES
@@ -753,7 +725,7 @@ glamor_init(ScreenPtr screen, unsigned int flags)
          * have instanced arrays, but this is not always the case.
          * etnaviv offers GLSL 140 with OpenGL 2.1.
          */
-        if (glamor_priv->glsl_version >= 130 &&
+        if (glamor_glsl_has_ints(glamor_priv) &&
             !epoxy_has_gl_extension("GL_ARB_instanced_arrays"))
                 glamor_priv->glsl_version = 120;
     } else {
@@ -778,6 +750,10 @@ glamor_init(ScreenPtr screen, unsigned int flags)
         ErrorF("GL_{ARB,OES}_vertex_array_object required\n");
         goto fail;
     }
+
+    if (!glamor_priv->is_gles && glamor_priv->glsl_version == 120 &&
+        epoxy_has_gl_extension("GL_ARB_instanced_arrays"))
+        glamor_priv->use_gpu_shader4 = epoxy_has_gl_extension("GL_EXT_gpu_shader4");
 
     glamor_priv->has_rw_pbo = FALSE;
     if (!glamor_priv->is_gles)
@@ -806,7 +782,7 @@ glamor_init(ScreenPtr screen, unsigned int flags)
         epoxy_gl_version() >= 30 ||
         epoxy_has_gl_extension("GL_NV_pack_subimage");
     glamor_priv->has_dual_blend =
-        glamor_priv->glsl_version >= 130 &&
+        glamor_glsl_has_ints(glamor_priv) &&
         epoxy_has_gl_extension("GL_ARB_blend_func_extended");
     glamor_priv->has_clear_texture =
         epoxy_gl_version() >= 44 ||
@@ -824,7 +800,8 @@ glamor_init(ScreenPtr screen, unsigned int flags)
      * cached IB.
      */
     if (strstr((char *)glGetString(GL_VENDOR), "Broadcom") &&
-        strstr((char *)glGetString(GL_RENDERER), "VC4"))
+        (strstr((char *)glGetString(GL_RENDERER), "VC4") ||
+         strstr((char *)glGetString(GL_RENDERER), "V3D")))
         glamor_priv->use_quads = FALSE;
 
     glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &glamor_priv->max_fbo_size);

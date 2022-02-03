@@ -65,8 +65,17 @@ option('sha1', type: 'combo', choices: ['libc', 'CommonCrypto', 'CryptoAPI', 'li
        description: 'SHA1 implementation')
 
 option('dri3', type: 'combo', choices: ['true', 'false', 'auto'], value: 'auto', description: 'Build DRI3 extension (default: auto)')
+option('drm', type: 'boolean', value: 'true',
+        description: 'Build Xorg with libdrm support')
 
 option('libunwind', type: 'boolean', value: false,
         description: 'Use libunwind for backtrace reporting')
 
 option('xwayland-path', type: 'string', description: 'Directory containing Xwayland executable')
+
+option('docs', type: 'combo', choices: ['true', 'false', 'auto'], value: 'auto',
+        description: 'Build documentation')
+option('devel-docs', type: 'combo', choices: ['true', 'false', 'auto'], value: 'auto',
+        description: 'Build development documentation')
+option('docs-pdf', type: 'combo', choices: ['true', 'false', 'auto'], value: 'auto',
+        description: 'Whether to build PDF version of documentation. Setting is ignored if documentation is not built.')

@@ -94,13 +94,28 @@ apt-get install -y \
 	python3-mako \
 	python3-numpy \
 	python3-six \
-	x11proto-dev \
 	xfonts-utils \
 	xkb-data \
 	xtrans-dev \
 	xutils-dev
 
 cd /root
+
+# xserver requires libxcvt
+git clone https://gitlab.freedesktop.org/xorg/lib//libxcvt.git --depth 1 --branch=libxcvt-0.1.0
+cd libxcvt
+meson _build
+ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
+cd ..
+rm -rf libxcvt
+
+# xserver requires xorgproto >= 2021.4.99.2 for XI 2.3.99.1
+git clone https://gitlab.freedesktop.org/xorg/proto/xorgproto.git --depth 1 --branch=xorgproto-2021.4.99.2
+pushd xorgproto
+./autogen.sh
+make -j${FDO_CI_CONCURRENT:-4} install
+popd
+rm -rf xorgproto
 
 # weston 9.0 requires libwayland >= 1.18
 git clone https://gitlab.freedesktop.org/wayland/wayland.git --depth 1 --branch=1.18.0
@@ -110,8 +125,8 @@ ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
 cd ..
 rm -rf wayland
 
-# Xwayland requires wayland-protocols >= 1.18, but Debian buster has 1.17 only
-git clone https://gitlab.freedesktop.org/wayland/wayland-protocols.git --depth 1 --branch=1.18
+# Xwayland requires wayland-protocols >= 1.22, but Debian buster has 1.17 only
+git clone https://gitlab.freedesktop.org/wayland/wayland-protocols.git --depth 1 --branch=1.22
 cd wayland-protocols
 ./autogen.sh
 make -j${FDO_CI_CONCURRENT:-4} install

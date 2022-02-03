@@ -1191,7 +1191,7 @@ EnqueueEvent(InternalEvent *ev, DeviceIntPtr device)
         }
     }
 
-    eventlen = event->length;
+    eventlen = sizeof(InternalEvent);
 
     qe = malloc(sizeof(QdEventRec) + eventlen);
     if (!qe)
@@ -1319,7 +1319,7 @@ ComputeFreezes(void)
 
         syncEvents.replayDev = (DeviceIntPtr) NULL;
 
-        if (!CheckDeviceGrabs(replayDev, &event->device_event,
+        if (!CheckDeviceGrabs(replayDev, event,
                               syncEvents.replayWin)) {
             if (IsTouchEvent(event)) {
                 TouchPointInfoPtr ti =
@@ -1327,6 +1327,15 @@ ComputeFreezes(void)
                 BUG_WARN(!ti);
 
                 TouchListenerAcceptReject(replayDev, ti, 0, XIRejectTouch);
+            }
+            else if (IsGestureEvent(event)) {
+                GestureInfoPtr gi =
+                    GestureFindActiveByEventType(replayDev, event->any.type);
+                if (gi) {
+                    GestureEmitGestureEndToOwner(replayDev, gi);
+                    GestureEndGesture(gi);
+                }
+                ProcessGestureEvent(event, replayDev);
             }
             else {
                 WindowPtr w = XYToWindow(replayDev->spriteInfo->sprite,
@@ -1480,20 +1489,72 @@ UpdateTouchesForGrab(DeviceIntPtr mouse)
 
         if (ti->active &&
             CLIENT_BITS(listener->listener) == grab->resource) {
+            if (grab->grabtype == CORE || grab->grabtype == XI ||
+                !xi2mask_isset(grab->xi2mask, mouse, XI_TouchBegin)) {
+
+                if (listener->type == TOUCH_LISTENER_REGULAR &&
+                    listener->state != TOUCH_LISTENER_AWAITING_BEGIN &&
+                    listener->state != TOUCH_LISTENER_HAS_END) {
+                    /* if the listener already got any events relating to the touch, we must send
+                       a touch end because the grab overrides the previous listener and won't
+                       itself send any touch events.
+                    */
+                    TouchEmitTouchEnd(mouse, ti, 0, listener->listener);
+                }
+                listener->type = TOUCH_LISTENER_POINTER_GRAB;
+            } else {
+                listener->type = TOUCH_LISTENER_GRAB;
+            }
+
             listener->listener = grab->resource;
             listener->level = grab->grabtype;
-            listener->state = TOUCH_LISTENER_IS_OWNER;
             listener->window = grab->window;
+            listener->state = TOUCH_LISTENER_IS_OWNER;
 
-            if (grab->grabtype == CORE || grab->grabtype == XI ||
-                !xi2mask_isset(grab->xi2mask, mouse, XI_TouchBegin))
-                listener->type = TOUCH_LISTENER_POINTER_GRAB;
-            else
-                listener->type = TOUCH_LISTENER_GRAB;
             if (listener->grab)
                 FreeGrab(listener->grab);
             listener->grab = AllocGrab(grab);
         }
+    }
+}
+
+/**
+ * Update gesture records when an explicit grab is activated. Any gestures owned
+ * by the grabbing client are updated so the listener state reflects the new
+ * grab.
+ */
+static void
+UpdateGesturesForGrab(DeviceIntPtr mouse)
+{
+    if (!mouse->gesture || mouse->deviceGrab.fromPassiveGrab)
+        return;
+
+    GestureInfoPtr gi = &mouse->gesture->gesture;
+    GestureListener *listener = &gi->listener;
+    GrabPtr grab = mouse->deviceGrab.grab;
+
+    if (gi->active && CLIENT_BITS(listener->listener) == grab->resource) {
+        if (grab->grabtype == CORE || grab->grabtype == XI ||
+            !xi2mask_isset(grab->xi2mask, mouse, GetXI2Type(gi->type))) {
+
+            if (listener->type == GESTURE_LISTENER_REGULAR) {
+                /* if the listener already got any events relating to the gesture, we must send
+                   a gesture end because the grab overrides the previous listener and won't
+                   itself send any gesture events.
+                */
+                GestureEmitGestureEndToOwner(mouse, gi);
+            }
+            listener->type = GESTURE_LISTENER_NONGESTURE_GRAB;
+        } else {
+            listener->type = GESTURE_LISTENER_GRAB;
+        }
+
+        listener->listener = grab->resource;
+        listener->window = grab->window;
+
+        if (listener->grab)
+            FreeGrab(listener->grab);
+        listener->grab = AllocGrab(grab);
     }
 }
 
@@ -1547,6 +1608,7 @@ ActivatePointerGrab(DeviceIntPtr mouse, GrabPtr grab,
     grabinfo->implicitGrab = autoGrab & ImplicitGrabMask;
     PostNewCursor(mouse);
     UpdateTouchesForGrab(mouse);
+    UpdateGesturesForGrab(mouse);
     CheckGrabForSyncs(mouse, (Bool) grab->pointerMode,
                       (Bool) grab->keyboardMode);
     if (oldgrab)
@@ -1602,6 +1664,16 @@ DeactivatePointerGrab(DeviceIntPtr mouse)
         if (dev->deviceGrab.sync.other == grab)
             dev->deviceGrab.sync.other = NullGrab;
     }
+
+    /* in case of explicit gesture grab, send end event to the grab client */
+    if (!wasPassive && mouse->gesture) {
+        GestureInfoPtr gi = &mouse->gesture->gesture;
+        if (gi->active && GestureResourceIsOwner(gi, grab_resource)) {
+            GestureEmitGestureEndToOwner(mouse, gi);
+            GestureEndGesture(gi);
+        }
+    }
+
     DoEnterLeaveEvents(mouse, mouse->id, grab->window,
                        mouse->spriteInfo->sprite->win, NotifyUngrab);
     if (grab->confineTo)
@@ -2533,6 +2605,44 @@ FixUpXI2DeviceEventFromWindow(SpritePtr pSprite, int evtype,
             (pSprite->hot.pScreen == pWin->drawable.pScreen);
 }
 
+static void
+FixUpXI2PinchEventFromWindow(SpritePtr pSprite, xXIGesturePinchEvent *event,
+                             WindowPtr pWin, Window child)
+{
+    event->root = RootWindow(pSprite)->drawable.id;
+    event->event = pWin->drawable.id;
+
+    if (pSprite->hot.pScreen == pWin->drawable.pScreen) {
+        event->event_x = event->root_x - double_to_fp1616(pWin->drawable.x);
+        event->event_y = event->root_y - double_to_fp1616(pWin->drawable.y);
+        event->child = child;
+    }
+    else {
+        event->event_x = 0;
+        event->event_y = 0;
+        event->child = None;
+    }
+}
+
+static void
+FixUpXI2SwipeEventFromWindow(SpritePtr pSprite, xXIGestureSwipeEvent *event,
+                             WindowPtr pWin, Window child)
+{
+    event->root = RootWindow(pSprite)->drawable.id;
+    event->event = pWin->drawable.id;
+
+    if (pSprite->hot.pScreen == pWin->drawable.pScreen) {
+        event->event_x = event->root_x - double_to_fp1616(pWin->drawable.x);
+        event->event_y = event->root_y - double_to_fp1616(pWin->drawable.y);
+        event->child = child;
+    }
+    else {
+        event->event_x = 0;
+        event->event_y = 0;
+        event->child = None;
+    }
+}
+
 /**
  * Adjust event fields to comply with the window properties.
  *
@@ -2566,6 +2676,18 @@ FixUpEventFromWindow(SpritePtr pSprite,
         case XI_BarrierHit:
         case XI_BarrierLeave:
             return;
+        case XI_GesturePinchBegin:
+        case XI_GesturePinchUpdate:
+        case XI_GesturePinchEnd:
+            FixUpXI2PinchEventFromWindow(pSprite,
+                                         (xXIGesturePinchEvent*) xE, pWin, child);
+            break;
+        case XI_GestureSwipeBegin:
+        case XI_GestureSwipeUpdate:
+        case XI_GestureSwipeEnd:
+            FixUpXI2SwipeEventFromWindow(pSprite,
+                                         (xXIGestureSwipeEvent*) xE, pWin, child);
+            break;
         default:
             FixUpXI2DeviceEventFromWindow(pSprite, evtype,
                                           (xXIDeviceEvent*) xE, pWin, child);
@@ -2905,7 +3027,7 @@ BOOL
 ActivateFocusInGrab(DeviceIntPtr dev, WindowPtr old, WindowPtr win)
 {
     BOOL rc = FALSE;
-    DeviceEvent event;
+    InternalEvent event;
 
     if (dev->deviceGrab.grab) {
         if (!dev->deviceGrab.fromPassiveGrab ||
@@ -2920,16 +3042,16 @@ ActivateFocusInGrab(DeviceIntPtr dev, WindowPtr old, WindowPtr win)
     if (win == NoneWin || win == PointerRootWin)
         return FALSE;
 
-    event = (DeviceEvent) {
-        .header = ET_Internal,
-        .type = ET_FocusIn,
-        .length = sizeof(DeviceEvent),
-        .time = GetTimeInMillis(),
-        .deviceid = dev->id,
-        .sourceid = dev->id,
-        .detail.button = 0
+    event = (InternalEvent) {
+        .device_event.header = ET_Internal,
+        .device_event.type = ET_FocusIn,
+        .device_event.length = sizeof(DeviceEvent),
+        .device_event.time = GetTimeInMillis(),
+        .device_event.deviceid = dev->id,
+        .device_event.sourceid = dev->id,
+        .device_event.detail.button = 0
     };
-    rc = (CheckPassiveGrabsOnWindow(win, dev, (InternalEvent *) &event, FALSE,
+    rc = (CheckPassiveGrabsOnWindow(win, dev, &event, FALSE,
                                     TRUE) != NULL);
     if (rc)
         DoEnterLeaveEvents(dev, dev->id, old, win, XINotifyPassiveGrab);
@@ -2946,7 +3068,7 @@ static BOOL
 ActivateEnterGrab(DeviceIntPtr dev, WindowPtr old, WindowPtr win)
 {
     BOOL rc = FALSE;
-    DeviceEvent event;
+    InternalEvent event;
 
     if (dev->deviceGrab.grab) {
         if (!dev->deviceGrab.fromPassiveGrab ||
@@ -2958,16 +3080,16 @@ ActivateEnterGrab(DeviceIntPtr dev, WindowPtr old, WindowPtr win)
         (*dev->deviceGrab.DeactivateGrab) (dev);
     }
 
-    event = (DeviceEvent) {
-        .header = ET_Internal,
-        .type = ET_Enter,
-        .length = sizeof(DeviceEvent),
-        .time = GetTimeInMillis(),
-        .deviceid = dev->id,
-        .sourceid = dev->id,
-        .detail.button = 0
+    event = (InternalEvent) {
+        .device_event.header = ET_Internal,
+        .device_event.type = ET_Enter,
+        .device_event.length = sizeof(DeviceEvent),
+        .device_event.time = GetTimeInMillis(),
+        .device_event.deviceid = dev->id,
+        .device_event.sourceid = dev->id,
+        .device_event.detail.button = 0
     };
-    rc = (CheckPassiveGrabsOnWindow(win, dev, (InternalEvent *) &event, FALSE,
+    rc = (CheckPassiveGrabsOnWindow(win, dev, &event, FALSE,
                                     TRUE) != NULL);
     if (rc)
         DoEnterLeaveEvents(dev, dev->id, old, win, XINotifyPassiveGrab);
@@ -4019,14 +4141,15 @@ CheckPassiveGrabsOnWindow(WindowPtr pWin,
 */
 
 Bool
-CheckDeviceGrabs(DeviceIntPtr device, DeviceEvent *event, WindowPtr ancestor)
+CheckDeviceGrabs(DeviceIntPtr device, InternalEvent *ievent, WindowPtr ancestor)
 {
     int i;
     WindowPtr pWin = NULL;
     FocusClassPtr focus =
-        IsPointerEvent((InternalEvent *) event) ? NULL : device->focus;
+        IsPointerEvent(ievent) ? NULL : device->focus;
     BOOL sendCore = (IsMaster(device) && device->coreEvents);
     Bool ret = FALSE;
+    DeviceEvent *event = &ievent->device_event;
 
     if (event->type != ET_ButtonPress && event->type != ET_KeyPress)
         return FALSE;
@@ -4049,7 +4172,7 @@ CheckDeviceGrabs(DeviceIntPtr device, DeviceEvent *event, WindowPtr ancestor)
     if (focus) {
         for (; i < focus->traceGood; i++) {
             pWin = focus->trace[i];
-            if (CheckPassiveGrabsOnWindow(pWin, device, (InternalEvent *) event,
+            if (CheckPassiveGrabsOnWindow(pWin, device, ievent,
                                           sendCore, TRUE)) {
                 ret = TRUE;
                 goto out;
@@ -4064,7 +4187,7 @@ CheckDeviceGrabs(DeviceIntPtr device, DeviceEvent *event, WindowPtr ancestor)
 
     for (; i < device->spriteInfo->sprite->spriteTraceGood; i++) {
         pWin = device->spriteInfo->sprite->spriteTrace[i];
-        if (CheckPassiveGrabsOnWindow(pWin, device, (InternalEvent *) event,
+        if (CheckPassiveGrabsOnWindow(pWin, device, ievent,
                                       sendCore, TRUE)) {
             ret = TRUE;
             goto out;

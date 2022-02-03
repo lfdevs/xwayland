@@ -280,6 +280,15 @@ typedef int (*RRCreateLeaseProcPtr)(ScreenPtr screen,
 typedef void (*RRTerminateLeaseProcPtr)(ScreenPtr screen,
                                         RRLeasePtr lease);
 
+typedef int (*RRRequestLeaseProcPtr)(ClientPtr client,
+                                     ScreenPtr screen,
+                                     RRLeasePtr lease);
+
+typedef void (*RRGetLeaseProcPtr)(ClientPtr client,
+                                 ScreenPtr screen,
+                                 RRLeasePtr *lease,
+                                 int *fd);
+
 /* These are for 1.0 compatibility */
 
 typedef struct _rrRefresh {
@@ -408,6 +417,9 @@ typedef struct _rrScrPriv {
     RRMonitorPtr *monitors;
 
     struct xorg_list leases;
+
+    RRRequestLeaseProcPtr rrRequestLease;
+    RRGetLeaseProcPtr rrGetLease;
 } rrScrPrivRec, *rrScrPrivPtr;
 
 extern _X_EXPORT DevPrivateKeyRec rrPrivKeyRec;
@@ -593,6 +605,8 @@ extern _X_EXPORT Bool RRScreenInit(ScreenPtr pScreen);
 
 extern _X_EXPORT RROutputPtr RRFirstOutput(ScreenPtr pScreen);
 
+extern _X_EXPORT RRCrtcPtr RRFirstEnabledCrtc(ScreenPtr pScreen);
+
 extern _X_EXPORT Bool RROutputSetNonDesktop(RROutputPtr output, Bool non_desktop);
 
 extern _X_EXPORT CARD16
@@ -641,6 +655,11 @@ extern _X_EXPORT void
  * Create a CRTC
  */
 extern _X_EXPORT RRCrtcPtr RRCrtcCreate(ScreenPtr pScreen, void *devPrivate);
+
+/*
+ * Tests if findCrtc belongs to pScreen or secondary screens
+ */
+extern _X_EXPORT Bool RRCrtcExists(ScreenPtr pScreen, RRCrtcPtr findCrtc);
 
 /*
  * Set the allowed rotations on a CRTC
