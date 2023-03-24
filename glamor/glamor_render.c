@@ -61,7 +61,7 @@ static struct blendinfo composite_op_info[] = {
 
 #define RepeatFix			10
 static GLuint
-glamor_create_composite_fs(struct shader_key *key)
+glamor_create_composite_fs(glamor_screen_private *glamor_priv, struct shader_key *key)
 {
     const char *repeat_define =
         "#define RepeatNone               	      0\n"
@@ -223,6 +223,17 @@ glamor_create_composite_fs(struct shader_key *key)
         "}\n";
     const char *header_ca_dual_blend =
         "#version 130\n";
+    const char *header_ca_dual_blend_gpu_shader4 =
+        "#version 120\n#extension GL_EXT_gpu_shader4 : require\n";
+    const char *in_ca_dual_blend_gles2 =
+        "void main()\n"
+        "{\n"
+        "	gl_FragColor = dest_swizzle(get_source() * get_mask());\n"
+        "	gl_SecondaryFragColorEXT = dest_swizzle(get_source().a * get_mask());\n"
+        "}\n";
+    const char *header_ca_dual_blend_gles2 =
+        "#version 100\n"
+        "#extension GL_EXT_blend_func_extended : require\n";
 
     char *source;
     const char *source_fetch;
@@ -292,7 +303,14 @@ glamor_create_composite_fs(struct shader_key *key)
         break;
     case glamor_program_alpha_dual_blend:
         in = in_ca_dual_blend;
-        header = header_ca_dual_blend;
+        if (glamor_priv->glsl_version >= 130)
+           header = header_ca_dual_blend;
+        else
+           header = header_ca_dual_blend_gpu_shader4;
+        break;
+    case glamor_program_alpha_dual_blend_gles2:
+        in = in_ca_dual_blend_gles2;
+        header = header_ca_dual_blend_gles2;
         break;
     default:
         FatalError("Bad composite IN type");
@@ -327,6 +345,8 @@ glamor_create_composite_vs(struct shader_key *key)
     const char *main_closing = "}\n";
     const char *source_coords_setup = "";
     const char *mask_coords_setup = "";
+    const char *version_gles2 = "#version 100\n";
+    const char *version = "";
     char *source;
     GLuint prog;
 
@@ -336,10 +356,15 @@ glamor_create_composite_vs(struct shader_key *key)
     if (key->mask != SHADER_MASK_NONE && key->mask != SHADER_MASK_SOLID)
         mask_coords_setup = mask_coords;
 
+    if (key->in == glamor_program_alpha_dual_blend_gles2)
+        version = version_gles2;
+
     XNFasprintf(&source,
+                "%s"
+                GLAMOR_DEFAULT_PRECISION
                 "%s%s%s%s",
-                main_opening,
-                source_coords_setup, mask_coords_setup, main_closing);
+                version, main_opening, source_coords_setup,
+                mask_coords_setup, main_closing);
 
     prog = glamor_compile_glsl_prog(GL_VERTEX_SHADER, source);
     free(source);
@@ -359,7 +384,7 @@ glamor_create_composite_shader(ScreenPtr screen, struct shader_key *key,
     vs = glamor_create_composite_vs(key);
     if (vs == 0)
         return;
-    fs = glamor_create_composite_fs(key);
+    fs = glamor_create_composite_fs(glamor_priv, key);
     if (fs == 0)
         return;
 
@@ -701,6 +726,7 @@ combine_pict_format(PictFormatShort * des, const PictFormatShort src,
         mask_type = PICT_FORMAT_TYPE(mask);
         break;
     case glamor_program_alpha_dual_blend:
+    case glamor_program_alpha_dual_blend_gles2:
         src_type = PICT_FORMAT_TYPE(src);
         mask_type = PICT_FORMAT_TYPE(mask);
         break;
@@ -886,8 +912,11 @@ glamor_composite_choose_shader(CARD8 op,
         else {
             if (op == PictOpClear)
                 key.mask = SHADER_MASK_NONE;
-            else if (glamor_priv->has_dual_blend)
-                key.in = glamor_program_alpha_dual_blend;
+            else if (glamor_priv->has_dual_blend) {
+                key.in = glamor_glsl_has_ints(glamor_priv) ?
+                    glamor_program_alpha_dual_blend :
+                    glamor_program_alpha_dual_blend_gles2;
+            }
             else if (op == PictOpSrc || op == PictOpAdd
                      || op == PictOpIn || op == PictOpOut
                      || op == PictOpOverReverse)
