@@ -51,6 +51,9 @@
 #include "xwayland-pixmap.h"
 #include "xwayland-present.h"
 #include "xwayland-shm.h"
+#ifdef XWL_HAS_EI
+#include "xwayland-xtest.h"
+#endif
 
 #ifdef MITSHM
 #include "shmint.h"
@@ -60,6 +63,7 @@
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "xwayland-shell-v1-client-protocol.h"
+#include "tearing-control-v1-client-protocol.h"
 
 static DevPrivateKeyRec xwl_screen_private_key;
 static DevPrivateKeyRec xwl_client_private_key;
@@ -458,6 +462,10 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
         xwl_screen->xwayland_shell =
             wl_registry_bind(registry, id, &xwayland_shell_v1_interface, 1);
     }
+    else if (strcmp(interface, "wp_tearing_control_manager_v1") == 0) {
+        xwl_screen->tearing_control_manager =
+            wl_registry_bind(registry, id, &wp_tearing_control_manager_v1_interface, 1);
+    }
 #ifdef XWL_HAS_GLAMOR
     else if (xwl_screen->glamor) {
         xwl_glamor_init_wl_registry(xwl_screen, registry, id, interface,
@@ -715,8 +723,8 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     struct xwl_screen *xwl_screen;
     Pixel red_mask, blue_mask, green_mask;
     int ret, bpc, green_bpc, i;
-    unsigned int xwl_width = 0;
-    unsigned int xwl_height = 0;
+    unsigned int xwl_width = 640;
+    unsigned int xwl_height = 480;
 #ifdef XWL_HAS_GLAMOR
     Bool use_eglstreams = FALSE;
 #endif
@@ -742,6 +750,11 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 
     dixSetPrivate(&pScreen->devPrivates, &xwl_screen_private_key, xwl_screen);
     xwl_screen->screen = pScreen;
+
+#ifdef XWL_HAS_EI
+    if (!xwayland_ei_init())
+        return FALSE;
+#endif
 
 #ifdef XWL_HAS_GLAMOR
     xwl_screen->glamor = 1;
@@ -786,6 +799,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
             use_fixed_size = 1;
         }
         else if (strcmp(argv[i], "-fullscreen") == 0) {
+            use_fixed_size = 1;
             xwl_screen->fullscreen = 1;
         }
         else if (strcmp(argv[i], "-host-grab") == 0) {
@@ -795,20 +809,20 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
         else if (strcmp(argv[i], "-decorate") == 0) {
 #ifdef XWL_HAS_LIBDECOR
             xwl_screen->decorate = 1;
+            use_fixed_size = 1;
 #else
             ErrorF("This build does not have libdecor support\n");
 #endif
         }
     }
 
-    if (use_fixed_size) {
-        if (xwl_screen->rootless) {
-            ErrorF("error, cannot set a geometry when running rootless\n");
-            return FALSE;
-        } else {
-            xwl_screen->width = xwl_width;
-            xwl_screen->height = xwl_height;
-        }
+    if (!xwl_screen->rootless) {
+        use_fixed_size = 1;
+        xwl_screen->width = xwl_width;
+        xwl_screen->height = xwl_height;
+    } else if (use_fixed_size) {
+        ErrorF("error, cannot set a geometry when running rootless\n");
+        return FALSE;
     }
 
 #ifdef XWL_HAS_GLAMOR
@@ -943,10 +957,11 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
            xwl_screen->glamor = 0;
         }
     }
-
+#ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor && xwl_screen->rootless)
         xwl_screen->present = xwl_present_init(pScreen);
-#endif
+#endif /* GLAMOR_HAS_GBM */
+#endif /* XWL_HAS_GLAMOR */
 
     if (!xwl_screen->glamor) {
         xwl_screen->CreateScreenResources = pScreen->CreateScreenResources;

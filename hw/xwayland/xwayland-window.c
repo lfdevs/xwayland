@@ -46,50 +46,23 @@
 #include "xwayland-shm.h"
 
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
+#include "tearing-control-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "xwayland-shell-v1-client-protocol.h"
 
 #define DELAYED_WL_SURFACE_DESTROY 1000 /* ms */
 
+#define MAX_ROOTFUL_WIDTH 32767
+#define MAX_ROOTFUL_HEIGHT 32767
+#define MIN_ROOTFUL_WIDTH 320
+#define MIN_ROOTFUL_HEIGHT 200
+
 static DevPrivateKeyRec xwl_window_private_key;
 static DevPrivateKeyRec xwl_damage_private_key;
 static const char *xwl_surface_tag = "xwl-surface";
 
-static void
-xwl_window_set_allow_commits(struct xwl_window *xwl_window, Bool allow,
-                             const char *debug_msg)
-{
-    xwl_window->allow_commits = allow;
-    DebugF("XWAYLAND: win %d allow_commits = %d (%s)\n",
-           xwl_window->window->drawable.id, allow, debug_msg);
-}
-
-static void
-xwl_window_set_allow_commits_from_property(struct xwl_window *xwl_window,
-                                           PropertyPtr prop)
-{
-    static Bool warned = FALSE;
-    CARD32 *propdata;
-
-    if (prop->propertyName != xwl_window->xwl_screen->allow_commits_prop)
-        FatalError("Xwayland internal error: prop mismatch in %s.\n", __func__);
-
-    if (prop->type != XA_CARDINAL || prop->format != 32 || prop->size != 1) {
-        /* Not properly set, so fall back to safe and glitchy */
-        xwl_window_set_allow_commits(xwl_window, TRUE, "WM fault");
-
-        if (!warned) {
-            LogMessageVerb(X_WARNING, 0, "Window manager is misusing property %s.\n",
-                           NameForAtom(prop->propertyName));
-            warned = TRUE;
-        }
-        return;
-    }
-
-    propdata = prop->data;
-    xwl_window_set_allow_commits(xwl_window, !!propdata[0], "from property");
-}
+static Bool xwl_window_attach_buffer(struct xwl_window *);
 
 struct xwl_window *
 xwl_window_get(WindowPtr window)
@@ -135,6 +108,53 @@ Bool
 is_surface_from_xwl_window(struct wl_surface *surface)
 {
     return wl_proxy_get_tag((struct wl_proxy *) surface) == &xwl_surface_tag;
+}
+
+static void
+xwl_window_set_allow_commits(struct xwl_window *xwl_window, Bool allow,
+                             const char *debug_msg)
+{
+    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
+    DamagePtr damage;
+
+    xwl_window->allow_commits = allow;
+    DebugF("XWAYLAND: win %d allow_commits = %d (%s)\n",
+           xwl_window->window->drawable.id, allow, debug_msg);
+
+    damage = window_get_damage(xwl_window->window);
+    if (allow &&
+        xorg_list_is_empty(&xwl_window->link_damage) &&
+        damage &&
+        RegionNotEmpty(DamageRegion(damage))) {
+        xorg_list_add(&xwl_window->link_damage,
+                      &xwl_screen->damage_window_list);
+    }
+}
+
+static void
+xwl_window_set_allow_commits_from_property(struct xwl_window *xwl_window,
+                                           PropertyPtr prop)
+{
+    static Bool warned = FALSE;
+    CARD32 *propdata;
+
+    if (prop->propertyName != xwl_window->xwl_screen->allow_commits_prop)
+        FatalError("Xwayland internal error: prop mismatch in %s.\n", __func__);
+
+    if (prop->type != XA_CARDINAL || prop->format != 32 || prop->size != 1) {
+        /* Not properly set, so fall back to safe and glitchy */
+        xwl_window_set_allow_commits(xwl_window, TRUE, "WM fault");
+
+        if (!warned) {
+            LogMessageVerb(X_WARNING, 0, "Window manager is misusing property %s.\n",
+                           NameForAtom(prop->propertyName));
+            warned = TRUE;
+        }
+        return;
+    }
+
+    propdata = prop->data;
+    xwl_window_set_allow_commits(xwl_window, !!propdata[0], "from property");
 }
 
 void
@@ -588,15 +608,50 @@ xwl_window_rootful_set_app_id(struct xwl_window *xwl_window)
         xdg_toplevel_set_app_id(xwl_window->xdg_toplevel, app_id);
 }
 
+static void
+xwl_window_maybe_resize(struct xwl_window *xwl_window, int width, int height)
+{
+    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
+    struct xwl_output *xwl_output;
+    RRModePtr mode;
+
+    /* Clamp the size */
+    width = min(max(width, MIN_ROOTFUL_WIDTH), MAX_ROOTFUL_WIDTH);
+    height = min(max(height, MIN_ROOTFUL_HEIGHT), MAX_ROOTFUL_HEIGHT);
+
+    if (width == xwl_screen->width && height == xwl_screen->height)
+        return;
+
+    xwl_output = xwl_screen_get_fixed_or_first_output(xwl_screen);
+    if (!xwl_randr_add_modes_fixed(xwl_output, width, height))
+        return;
+
+    mode = xwl_output_find_mode(xwl_output, width, height);
+    xwl_output_set_mode_fixed(xwl_output, mode);
+
+    xwl_window_attach_buffer(xwl_window);
+}
+
 #ifdef XWL_HAS_LIBDECOR
 static void
-xwl_window_update_libdecor_size(struct xwl_window *xwl_window, int width, int height)
+xwl_window_libdecor_set_size_limits(struct xwl_window *xwl_window)
+{
+    libdecor_frame_set_min_content_size(xwl_window->libdecor_frame,
+                                        MIN_ROOTFUL_WIDTH, MIN_ROOTFUL_HEIGHT);
+    libdecor_frame_set_max_content_size(xwl_window->libdecor_frame,
+                                        MAX_ROOTFUL_WIDTH, MAX_ROOTFUL_HEIGHT);
+}
+
+static void
+xwl_window_update_libdecor_size(struct xwl_window *xwl_window,
+                                struct libdecor_configuration *configuration /* nullable */,
+                                int width, int height)
 {
     struct libdecor_state *state;
 
     if (xwl_window->libdecor_frame) {
 	state = libdecor_state_new(width, height);
-	libdecor_frame_commit(xwl_window->libdecor_frame, state, NULL);
+	libdecor_frame_commit(xwl_window->libdecor_frame, state, configuration);
 	libdecor_state_free(state);
     }
 }
@@ -608,22 +663,16 @@ handle_libdecor_configure(struct libdecor_frame *frame,
 {
     struct xwl_window *xwl_window = data;
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
-    struct libdecor_state *state;
+    int width, height;
 
-    state = libdecor_state_new(xwl_screen->width, xwl_screen->height);
-    libdecor_frame_commit(frame, state, configuration);
-    libdecor_state_free(state);
+    if (!libdecor_configuration_get_content_size(configuration, frame, &width, &height)) {
+        width = xwl_screen->width;
+        height = xwl_screen->height;
+    }
 
-    if (libdecor_frame_has_capability(frame, LIBDECOR_ACTION_RESIZE))
-        libdecor_frame_unset_capabilities(frame, LIBDECOR_ACTION_RESIZE);
-    if (libdecor_frame_has_capability(frame, LIBDECOR_ACTION_FULLSCREEN))
-        libdecor_frame_unset_capabilities(frame, LIBDECOR_ACTION_FULLSCREEN);
-
-    /* FIXME:
-     * We're not xdg-shell compliant here, we are supposed to adjust to
-     * the given configure size.
-     */
-
+    xwl_window_maybe_resize(xwl_window, width, height);
+    xwl_window_update_libdecor_size(xwl_window, configuration,
+                                    xwl_screen->width, xwl_screen->height);
     wl_surface_commit(xwl_window->surface);
 }
 
@@ -716,6 +765,14 @@ xdg_toplevel_handle_configure(void *data,
                               int32_t height,
                               struct wl_array *states)
 {
+    struct xwl_window *xwl_window = data;
+
+    /* Maintain our current size if no dimensions are requested */
+    if (width == 0 && height == 0)
+        return;
+
+    /* This will be committed by the xdg_surface.configure handler */
+    xwl_window_maybe_resize(xwl_window, width, height);
 }
 
 static void
@@ -746,6 +803,7 @@ xwl_create_root_surface(struct xwl_window *xwl_window)
                               xwl_window->surface,
                               &libdecor_frame_iface,
                               xwl_window);
+        xwl_window_libdecor_set_size_limits(xwl_window);
         libdecor_frame_map(xwl_window->libdecor_frame);
     }
     else
@@ -773,12 +831,11 @@ xwl_create_root_surface(struct xwl_window *xwl_window)
 
         xdg_toplevel_add_listener(xwl_window->xdg_toplevel,
                                   &xdg_toplevel_listener,
-                                  NULL);
+                                  xwl_window);
     }
 
     xwl_window_rootful_update_title(xwl_window);
     xwl_window_rootful_set_app_id(xwl_window);
-
     wl_surface_commit(xwl_window->surface);
 
     region = wl_compositor_create_region(xwl_screen->compositor);
@@ -882,6 +939,11 @@ ensure_surface_for_window(WindowPtr window)
     } else {
         /* CSD or O-R toplevel window, check viewport on creation */
         xwl_window_check_resolution_change_emulation(xwl_window);
+    }
+
+    if (xwl_screen->tearing_control_manager) {
+        xwl_window->tearing_control = wp_tearing_control_manager_v1_get_tearing_control(
+            xwl_screen->tearing_control_manager, xwl_window->surface);
     }
 
     return TRUE;
@@ -1094,6 +1156,9 @@ xwl_unrealize_window(WindowPtr window)
         xwl_present_for_each_frame_callback(xwl_window, xwl_present_unrealize_window);
 #endif
 
+    if (xwl_window->tearing_control)
+        wp_tearing_control_v1_destroy(xwl_window->tearing_control);
+
     release_wl_surface_for_window(xwl_window);
     xorg_list_del(&xwl_window->link_damage);
     xorg_list_del(&xwl_window->link_window);
@@ -1188,7 +1253,7 @@ xwl_resize_window(WindowPtr window,
             xwl_window_check_resolution_change_emulation(xwl_window);
 #ifdef XWL_HAS_LIBDECOR
         if (window == screen->root)
-            xwl_window_update_libdecor_size(xwl_window, width, height);
+            xwl_window_update_libdecor_size(xwl_window, NULL, width, height);
 #endif
     }
 }
@@ -1285,8 +1350,8 @@ xwl_destroy_window(WindowPtr window)
     return ret;
 }
 
-void
-xwl_window_post_damage(struct xwl_window *xwl_window)
+static Bool
+xwl_window_attach_buffer(struct xwl_window *xwl_window)
 {
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
     RegionPtr region;
@@ -1294,8 +1359,6 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
     int i;
-
-    assert(!xwl_window->frame_callback);
 
     region = DamageRegion(window_get_damage(xwl_window->window));
     pixmap = xwl_window_buffers_get_pixmap(xwl_window, region);
@@ -1309,14 +1372,14 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
     if (!buffer) {
         ErrorF("Error getting buffer\n");
-        return;
+        return FALSE;
     }
 
 #ifdef XWL_HAS_GLAMOR
     if (xwl_screen->glamor) {
         if (!xwl_glamor_post_damage(xwl_window, pixmap, region)) {
             ErrorF("glamor: Failed to post damage\n");
-            return;
+            return FALSE;
         }
     }
 #endif
@@ -1342,6 +1405,17 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
                                box->x2 - box->x1, box->y2 - box->y1);
         }
     }
+
+    return TRUE;
+}
+
+void
+xwl_window_post_damage(struct xwl_window *xwl_window)
+{
+    assert(!xwl_window->frame_callback);
+
+    if (!xwl_window_attach_buffer(xwl_window))
+        return;
 
     xwl_window_create_frame_callback(xwl_window);
     DamageEmpty(window_get_damage(xwl_window->window));

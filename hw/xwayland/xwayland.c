@@ -107,7 +107,7 @@ ddxUseMsg(void)
     ErrorF("-noTouchPointerEmulation  disable touch pointer emulation\n");
     ErrorF("-force-xrandr-emulation   force non-native modes to be exposed when viewporter is not exposed by the compositor\n");
 #ifdef XWL_HAS_LIBDECOR
-    ErrorF("-decorate              add decorations to Xwayland when rootful (experimental)\n");
+    ErrorF("-decorate              add decorations to Xwayland when rootful\n");
 #endif
 }
 
@@ -289,14 +289,13 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
     DeleteCallback(&SelectionCallback, wm_selection_callback, xwl_screen);
 }
 
-_X_NORETURN
 static void _X_ATTRIBUTE_PRINTF(1, 0)
 xwl_log_handler(const char *format, va_list args)
 {
     char msg[256];
 
     vsnprintf(msg, sizeof msg, format, args);
-    FatalError("%s", msg);
+    ErrorF("XWAYLAND: %s", msg);
 }
 
 #ifdef XWL_HAS_XWAYLAND_EXTENSION

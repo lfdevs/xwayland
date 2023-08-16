@@ -107,6 +107,8 @@ conf_data.set('GBM_BO_WITH_MODIFIERS',
               build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 17.1') ? '1' : false)
 conf_data.set('GBM_BO_FD_FOR_PLANE',
               build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 21.1') ? '1' : false)
+conf_data.set('GBM_BO_WITH_MODIFIERS2',
+              build_glamor and gbm_dep.found() and gbm_dep.version().version_compare('>= 21.3') ? '1' : false)
 
 conf_data.set_quoted('SERVER_MISC_CONFIG_PATH', serverconfigdir)
 conf_data.set_quoted('PROJECTROOT', get_option('prefix'))
@@ -178,7 +180,7 @@ if cc.has_header_symbol('sys/socket.h', 'SCM_RIGHTS')
 endif
 
 if conf_data.get('HAVE_GETPEEREID').to_int() == 0 and conf_data.get('HAVE_GETPEERUCRED').to_int() == 0
-    if not cc.has_header_symbol('sys/socket.h', 'SO_PEERCRED')
+    if not cc.has_header_symbol('sys/socket.h', 'SO_PEERCRED', args: '-D_GNU_SOURCE')
         conf_data.set('NO_LOCAL_CLIENT_CRED', 1)
     endif
 endif
@@ -305,6 +307,8 @@ xwayland_data.set('XWL_HAS_GLAMOR', build_glamor and (gbm_dep.found() or build_e
 xwayland_data.set('XWL_HAS_EGLSTREAM', build_eglstream ? '1' : false)
 xwayland_data.set('XWL_HAS_LIBDECOR', have_libdecor ? '1' : false)
 xwayland_data.set('XWL_HAS_XWAYLAND_EXTENSION', xwaylandproto_dep.found() ? '1' : false)
+xwayland_data.set('XWL_HAS_EI', build_ei)
+xwayland_data.set('XWL_HAS_EI_PORTAL', build_ei_portal)
 
 configure_file(output : 'xwayland-config.h',
                input : 'xwayland-config.h.meson.in',

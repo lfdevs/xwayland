@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, Oracle and/or its affiliates.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -339,9 +339,9 @@ compIsAlternateVisual(ScreenPtr pScreen, XID visual)
     return FALSE;
 }
 
-static Bool
-compIsImplicitRedirectException(ScreenPtr pScreen,
-                                XID parentVisual, XID winVisual)
+Bool
+CompositeIsImplicitRedirectException(ScreenPtr pScreen,
+                                     XID parentVisual, XID winVisual)
 {
     CompScreenPtr cs = GetCompScreen(pScreen);
     int i;
@@ -362,7 +362,7 @@ compImplicitRedirect(WindowPtr pWin, WindowPtr pParent)
         XID winVisual = wVisual(pWin);
         XID parentVisual = wVisual(pParent);
 
-        if (compIsImplicitRedirectException(pScreen, parentVisual, winVisual))
+        if (CompositeIsImplicitRedirectException(pScreen, parentVisual, winVisual))
             return FALSE;
 
         if (winVisual != parentVisual &&

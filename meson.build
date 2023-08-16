@@ -3,10 +3,10 @@ project('xwayland', 'c',
             'buildtype=debugoptimized',
             'c_std=gnu99',
         ],
-        version: '23.1.1',
+        version: '23.2.0',
         meson_version: '>= 0.52.0',
 )
-release_date = '2023-03-29'
+release_date = '2023-08-16'
 
 add_project_arguments('-DHAVE_DIX_CONFIG_H', language: ['c', 'objc'])
 cc = meson.get_compiler('c')
@@ -64,7 +64,7 @@ libdrm_req = '>= 2.4.109'
 libselinux_req = '>= 2.0.86'
 xext_req = '>= 1.0.99.4'
 wayland_req = '>= 1.21.0'
-wayland_protocols_req = '>= 1.28'
+wayland_protocols_req = '>= 1.30'
 gbm_req = '>= 10.2'
 
 xproto_dep = dependency('xproto', version: '>= 7.0.31', fallback: ['xorgproto', 'ext_xorgproto'])
@@ -78,6 +78,7 @@ fixesproto_dep = dependency('fixesproto', version: '>= 6.0', fallback: ['xorgpro
 damageproto_dep = dependency('damageproto', version: '>= 1.1', fallback: ['xorgproto', 'ext_xorgproto'])
 xcmiscproto_dep = dependency('xcmiscproto', version: '>= 1.2.0', fallback: ['xorgproto', 'ext_xorgproto'])
 bigreqsproto_dep = dependency('bigreqsproto', version: '>= 1.1.0', fallback: ['xorgproto', 'ext_xorgproto'])
+presentproto_dep = dependency('presentproto', version: '>= 1.3', fallback: ['xorgproto', 'ext_xorgproto'])
 xtrans_dep = dependency('xtrans', version: '>= 1.3.5')
 
 videoproto_dep = dependency('videoproto', fallback: ['xorgproto', 'ext_xorgproto'])
@@ -224,6 +225,17 @@ if build_glamor
     endif
 else
     build_eglstream = false
+endif
+
+if build_xwayland
+    libei_dep = dependency('libei-1.0', version: '>= 1.0.0', required: get_option('xwayland_ei') in ['portal', 'socket'])
+    liboeffis_dep = dependency('liboeffis-1.0', version: '>= 1.0.0', required: get_option('xwayland_ei') == 'portal')
+
+    build_ei = libei_dep.found() and get_option('xwayland_ei') != 'false'
+    build_ei_portal = liboeffis_dep.found() and get_option('xwayland_ei') in ['portal', 'auto']
+else
+    build_ei = false
+    build_ei_portal = false
 endif
 
 # Lots of sha1 options, because Linux is about choice :)
@@ -393,6 +405,7 @@ common_dep = [
     damageproto_dep,
     xcmiscproto_dep,
     bigreqsproto_dep,
+    presentproto_dep,
     xtrans_dep,
     libsystemd_daemon_dep,
 

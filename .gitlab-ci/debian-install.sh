@@ -95,6 +95,8 @@ apt-get install -y \
 	meson \
 	nettle-dev \
 	pkg-config \
+	python3-attr \
+	python3-jinja2 \
 	python3-mako \
 	python3-numpy \
 	python3-six \
@@ -123,8 +125,8 @@ ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
 cd ..
 rm -rf libxcvt
 
-# xserver requires xorgproto >= 2022.2 for XWAYLAND
-git clone https://gitlab.freedesktop.org/xorg/proto/xorgproto.git --depth 1 --branch=xorgproto-2022.2
+# xserver requires xorgproto >= 2023.2 for XWAYLAND
+git clone https://gitlab.freedesktop.org/xorg/proto/xorgproto.git --depth 1 --branch=xorgproto-2023.2
 pushd xorgproto
 ./autogen.sh
 make -j${FDO_CI_CONCURRENT:-4} install
@@ -139,8 +141,8 @@ ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
 cd ..
 rm -rf wayland
 
-# Xwayland requires wayland-protocols >= 1.28, but Debian bullseye has 1.20 only
-git clone https://gitlab.freedesktop.org/wayland/wayland-protocols.git --depth 1 --branch=1.28
+# Xwayland requires wayland-protocols >= 1.30, but Debian bullseye has 1.20 only
+git clone https://gitlab.freedesktop.org/wayland/wayland-protocols.git --depth 1 --branch=1.30
 cd wayland-protocols
 meson _build
 ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
@@ -154,6 +156,14 @@ meson _build -D{demo,install_demo}=false
 ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
 cd ..
 rm -rf libdecor
+
+# Install libei for Xwayland
+git clone https://gitlab.freedesktop.org/libinput/libei.git --depth 1 --branch=1.0.0
+cd libei
+meson setup _build -Dtests=disabled -Ddocumentation=[] -Dliboeffis=enabled
+ninja -C _build -j${FDO_CI_CONCURRENT:-4} install
+cd ..
+rm -rf libei
 
 git clone https://gitlab.freedesktop.org/mesa/piglit.git
 cd piglit

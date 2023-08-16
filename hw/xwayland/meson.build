@@ -48,6 +48,7 @@ xdg_shell_xml = join_paths(protodir, 'stable', 'xdg-shell', 'xdg-shell.xml')
 drm_lease_xml = join_paths(protodir, 'staging', 'drm-lease', 'drm-lease-v1.xml')
 shortcuts_inhibit_xml = join_paths(protodir, 'unstable', 'keyboard-shortcuts-inhibit', 'keyboard-shortcuts-inhibit-unstable-v1.xml')
 xwayland_shell_xml = join_paths(protodir, 'staging', 'xwayland-shell', 'xwayland-shell-v1.xml')
+tearing_xml = join_paths(protodir, 'staging', 'tearing-control', 'tearing-control-v1.xml')
 
 client_header = generator(scanner,
     output : '@BASENAME@-client-protocol.h',
@@ -76,6 +77,7 @@ srcs += client_header.process(xdg_shell_xml)
 srcs += client_header.process(drm_lease_xml)
 srcs += client_header.process(shortcuts_inhibit_xml)
 srcs += client_header.process(xwayland_shell_xml)
+srcs += client_header.process(tearing_xml)
 srcs += code.process(relative_xml)
 srcs += code.process(pointer_xml)
 srcs += code.process(gestures_xml)
@@ -88,6 +90,16 @@ srcs += code.process(xdg_shell_xml)
 srcs += code.process(drm_lease_xml)
 srcs += code.process(shortcuts_inhibit_xml)
 srcs += code.process(xwayland_shell_xml)
+srcs += code.process(tearing_xml)
+
+if build_ei
+    xwayland_dep += libei_dep
+    srcs += [ 'xwayland-xtest.c', 'xwayland-xtest.h' ]
+
+    if build_ei_portal
+        xwayland_dep += liboeffis_dep
+    endif
+endif
 
 xwayland_glamor = []
 eglstream_srcs = []
@@ -97,7 +109,10 @@ if build_glamor
         srcs += 'xwayland-glx.c'
     endif
     if gbm_dep.found()
-        srcs += 'xwayland-glamor-gbm.c'
+        srcs += [
+                  'xwayland-glamor-gbm.c',
+                  'xwayland-present.c'
+                ]
     endif
     if build_eglstream
         eglstream_protodir = eglstream_dep.get_pkgconfig_variable('pkgdatadir')
@@ -111,7 +126,6 @@ if build_glamor
 
         srcs += 'xwayland-glamor-eglstream.c'
     endif
-    srcs += 'xwayland-present.c'
     if build_xv
         srcs += 'xwayland-glamor-xv.c'
     endif
