@@ -1,3 +1,10 @@
+xwayland (2:24.1.4-2) unstable; urgency=medium
+
+  [ Alessandro Astone ]
+  * Backport patch to fix busy-loop on inactive VT (LP: #2043517)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 16 Dec 2024 14:27:57 +0200
+
 xwayland (2:24.1.4-1) unstable; urgency=medium
 
   * New upstream release
