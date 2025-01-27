@@ -1,3 +1,11 @@
+xwayland (2:24.1.4-3) unstable; urgency=medium
+
+  [ Alessandro Astone ]
+  * Add patch to fix possible crash after the previous backport
+    (LP: #2096653)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 27 Jan 2025 13:17:11 +0200
+
 xwayland (2:24.1.4-2) unstable; urgency=medium
 
   [ Alessandro Astone ]
