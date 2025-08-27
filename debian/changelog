@@ -1,3 +1,18 @@
+xwayland (2:24.1.8-1) unstable; urgency=medium
+
+  * Add README.Debian.security to clarify how the security issues are
+    inherited from the shared codebase with xorg-server, and don't
+    actually apply to xwayland. Thanks, Moritz Muehlenhoff!
+  * New upstream release. (Closes: #1108369)
+    - CVE-2025-49175
+    - CVE-2025-49176
+    - CVE-2025-49177
+    - CVE-2025-49178
+    - CVE-2025-49179
+    - CVE-2025-49180
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 27 Aug 2025 10:25:23 +0300
+
 xwayland (2:24.1.6-1) unstable; urgency=medium
 
   * New upstream release. Fixes:
