@@ -1,3 +1,17 @@
+xwayland (2:24.1.9-1) unstable; urgency=medium
+
+  [ Alessandro Astone ]
+  * Enable input emulation through XDG Desktop Portal (LP: #2075962)
+  * Actually set debian builder string
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+    - CVE-2025-62229
+    - CVE-2025-62230
+    - CVE-2025-62231
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 24 Nov 2025 19:17:29 +0200
+
 xwayland (2:24.1.8-1) unstable; urgency=medium
 
   * Add README.Debian.security to clarify how the security issues are
