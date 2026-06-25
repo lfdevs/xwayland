@@ -1,3 +1,14 @@
+xwayland (2:24.1.10-90) unstable; urgency=medium
+
+  * Add kgsl/freedreno compatibility patch for linux-dmabuf v3:
+    - allow glamor startup without wl_drm or dmabuf feedback when dmabuf v3
+      is available;
+    - fall back to XWAYLAND_GBM_DEVICE or /dev/dri/renderD128 when no usable
+      compositor main render node is advertised;
+    - handle implicit and bogus linear modifiers in dmabuf buffer paths.
+
+ -- lfdevs <lfdevs@lfdevs.com>  Fri, 26 Jun 2026 01:22:00 +0800
+
 xwayland (2:24.1.10-1) unstable; urgency=medium
 
   * New upstream release.
