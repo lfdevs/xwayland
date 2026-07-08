@@ -1,1 +1,2 @@
 0001-xwayland-support-kgsl-dmabuf-v3-fallback-paths.patch
+0002-xwayland-glamor-add-KGSL-surfaceless-backend-path.patch
