@@ -1,0 +1,89 @@
+name: Build Check
+
+on:
+  pull_request:
+    branches:
+      - debian-unstable
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04-arm
+    container:
+      image: debian:trixie
+      options: --privileged --user root
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources
+          apt update
+          apt build-dep -y xwayland
+          apt install -y git ccache build-essential devscripts fakeroot quilt git-buildpackage pristine-tar
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: /root/.ccache
+          key: ccache-xwayland-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-xwayland-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Configure ccache
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          ccache --max-size=2G
+          ccache --show-config
+          ccache --zero-stats
+          ccache --show-stats
+
+      - name: Clone repository
+        run: |
+          cd ~
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone -b ${{ github.event.pull_request.head.ref }} --depth 1 ${{ github.event.pull_request.head.repo.html_url }}.git xwayland
+
+      - name: Set release name suffix
+        shell: bash
+        run: |
+          cd ~/xwayland
+          short_hash=$(git rev-parse --short HEAD)
+          echo "XWAYLAND_RELEASE_NAME_SUFFIX=${short_hash}_debian_trixie_arm64" >> "$GITHUB_ENV"
+
+      - name: Build Xwayland
+        shell: bash
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          echo "Building Xwayland..."
+          cd ~/xwayland
+          origtargz
+          gbp buildpackage -uc -us -jauto --git-ignore-branch
+          echo "Xwayland build completed successfully!"
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: /root/.ccache
+          key: ccache-xwayland-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          cd ~
+          rm -f *dev* *dbgsym*
+          echo "Calculating sha256 checksums..."
+          find . -maxdepth 1 \( -name "*.deb" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
+          cat sha256sums.txt && echo
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: xwayland_${{ env.XWAYLAND_RELEASE_NAME_SUFFIX }}
+          path: |
+            ~/*.deb
+            ~/sha256sums.txt
+          retention-days: 90
