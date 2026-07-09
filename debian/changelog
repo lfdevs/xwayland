@@ -1,8 +1,10 @@
 xwayland (2:24.1.6-91) unstable; urgency=medium
 
   * Add KGSL surfaceless backend path.
+  * Support KGSL surfaceless client rendering.
+  * Scope KGSL frame callback recovery per window.
 
- -- lfdevs <lfdevs@lfdevs.com>  Wed, 08 Jul 2026 14:00:00 +0800
+ -- lfdevs <lfdevs@lfdevs.com>  Thu, 09 Jul 2026 15:56:00 +0800
 
 xwayland (2:24.1.6-90) unstable; urgency=medium
 
