@@ -1,3 +1,9 @@
+xwayland (2:24.1.6-91) unstable; urgency=medium
+
+  * Add KGSL surfaceless backend path.
+
+ -- lfdevs <lfdevs@lfdevs.com>  Wed, 08 Jul 2026 14:00:00 +0800
+
 xwayland (2:24.1.6-90) unstable; urgency=medium
 
   * Add kgsl/freedreno compatibility patch for linux-dmabuf v3:
