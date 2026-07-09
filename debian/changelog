@@ -1,3 +1,11 @@
+xwayland (2:24.1.10-91) unstable; urgency=medium
+
+  * Add KGSL surfaceless backend path.
+  * Support KGSL surfaceless client rendering.
+  * Scope KGSL frame callback recovery per window.
+
+ -- lfdevs <lfdevs@lfdevs.com>  Thu, 09 Jul 2026 16:26:00 +0800
+
 xwayland (2:24.1.10-90) unstable; urgency=medium
 
   * Add kgsl/freedreno compatibility patch for linux-dmabuf v3:
