@@ -1,3 +1,12 @@
+xwayland (2:24.1.6-92) UNRELEASED; urgency=medium
+
+  [ KiralyCraft ]
+  * present: disarm wait-fence callbacks before re-execution
+  * miext/sync: backport callback-safe fence trigger iteration
+  * xwayland: avoid reacquiring the source after Present COPY
+
+ -- lfdevs <lfdevs@lfdevs.com>  Thu, 08 Oct 2026 20:52:15 +0800
+
 xwayland (2:24.1.6-91) unstable; urgency=medium
 
   * Add KGSL surfaceless backend path.
