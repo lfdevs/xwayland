@@ -2,3 +2,6 @@
 0002-xwayland-glamor-add-KGSL-surfaceless-backend-path.patch
 0003-xwayland-dri3-support-KGSL-surfaceless-client-render.patch
 0004-xwayland-scope-KGSL-frame-callback-recovery-per-window.patch
+0005-present-disarm-wait-fence-before-re-execution.patch
+0006-miext-sync-restart-trigger-scan-after-callback.patch
+0007-xwayland-present-do-not-rewait-after-copy.patch

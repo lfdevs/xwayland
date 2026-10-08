@@ -1,0 +1,49 @@
+From: Olivier Fourdan <ofourdan@redhat.com>
+Subject: miext/sync: restart the trigger scan after a callback
+Origin: upstream, https://gitlab.freedesktop.org/xorg/xserver/-/commit/f19ab94ba9c891d801231654267556dc7f32b5e0
+
+Backport upstream's trigger-list lifetime correction. A callback can remove
+other entries as well as its own entry, so saving the next pointer before
+calling it is not sufficient. Restart from the current list head instead.
+
+Apply after the Present one-shot callback correction, so a request that
+survives re-execution cannot keep firing in the restart scan.
+
+Signed-off-by: Olivier Fourdan <ofourdan@redhat.com>
+Acked-by: Peter Hutterer <peter.hutterer@who-t.net>
+---
+ miext/sync/misync.c | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/miext/sync/misync.c b/miext/sync/misync.c
+--- a/miext/sync/misync.c
++++ b/miext/sync/misync.c
+@@ -131,16 +131,22 @@ miSyncDestroyFence(SyncFence * pFence)
+ void
+ miSyncTriggerFence(SyncFence * pFence)
+ {
+-    SyncTriggerList *ptl, *pNext;
++    SyncTriggerList *ptl;
++    Bool triggered;
+ 
+     pFence->funcs.SetTriggered(pFence);
+ 
+     /* run through triggers to see if any fired */
+-    for (ptl = pFence->sync.pTriglist; ptl; ptl = pNext) {
+-        pNext = ptl->next;
+-        if ((*ptl->pTrigger->CheckTrigger) (ptl->pTrigger, 0))
+-            (*ptl->pTrigger->TriggerFired) (ptl->pTrigger);
+-    }
++    do {
++        triggered = FALSE;
++        for (ptl = pFence->sync.pTriglist; ptl; ptl = ptl->next) {
++            if ((*ptl->pTrigger->CheckTrigger) (ptl->pTrigger, 0)) {
++                (*ptl->pTrigger->TriggerFired) (ptl->pTrigger);
++                triggered = TRUE;
++                break;
++            }
++        }
++    } while (triggered);
+ }
+ 
+ SyncScreenFuncsPtr
