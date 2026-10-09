@@ -1,3 +1,11 @@
+xwayland (2:24.1.10-92) unstable; urgency=medium
+
+  [ KiralyCraft ]
+  * present: disarm the wait-fence callback before re-execution
+  * xwayland: do not reacquire a copied Present pixmap
+
+ -- lfdevs <lfdevs@lfdevs.com>  Fri, 09 Oct 2026 18:46:29 +0800
+
 xwayland (2:24.1.10-91) unstable; urgency=medium
 
   * Add KGSL surfaceless backend path.
